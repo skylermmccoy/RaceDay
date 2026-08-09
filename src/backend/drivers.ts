@@ -251,7 +251,12 @@ function toStandings(
             const result = resultsByDriverId.get(e.driver_id);
 
             return {
-            id: String(e.driver_id),
+            // The Truck feed reports driver_id 0 for a handful of part-timers
+            // (three of them in 2026), so driver_id alone is not unique enough
+            // to key a list or a selection. Fall back to the points position,
+            // which is. Anything keyed this way can never join to a live-feed
+            // entry — correct, since those drivers have no id to join on.
+            id: e.driver_id ? String(e.driver_id) : `pos-${e.points_position}`,
             driverId: e.driver_id,
             position: e.points_position,
             name: cleanName(e.first_name, e.last_name),
