@@ -30,6 +30,8 @@ export const Colors = {
     // Logo blue/gold are tuned for white backgrounds — darkened to stay legible.
     link: '#0069A8',
     podium: '#A97A08',
+    positive: '#1B7F3B',
+    negative: '#C62828',
   },
   dark: {
     text: '#ffffff',
@@ -41,10 +43,47 @@ export const Colors = {
     accent: '#FF5F62',
     link: '#4FB0EE',
     podium: Brand.gold,
+    positive: '#4CC97A',
+    negative: '#FF6B6B',
   },
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+/**
+ * Flag states are the one place a single theme color will not do: the banner
+ * fills with the flag's own color, so each needs a foreground picked to stay
+ * legible on it — white on the yellow flag fails contrast outright. Keeping them
+ * out of `Colors` also stops eight one-off keys polluting `ThemeColor`, which
+ * every ThemedText call site sees.
+ *
+ * `finished`, `stopped` and `unknown` share a neutral so an unmapped flag_state
+ * degrades to something readable rather than blank.
+ */
+export const Flags = {
+  light: {
+    green: { bg: '#1B7F3B', fg: '#FFFFFF' },
+    yellow: { bg: '#F2C200', fg: '#241E00' },
+    red: { bg: '#C62828', fg: '#FFFFFF' },
+    checkered: { bg: '#1C1C1E', fg: '#FFFFFF' },
+    finished: { bg: '#3A3A3C', fg: '#FFFFFF' },
+    warmup: { bg: '#5A5F66', fg: '#FFFFFF' },
+    stopped: { bg: '#5A5F66', fg: '#FFFFFF' },
+    unknown: { bg: '#5A5F66', fg: '#FFFFFF' },
+  },
+  dark: {
+    green: { bg: '#2E9D52', fg: '#04170B' },
+    yellow: { bg: '#FFD400', fg: '#241E00' },
+    red: { bg: '#E14B4B', fg: '#1A0303' },
+    checkered: { bg: '#F2F2F5', fg: '#1C1C1E' },
+    finished: { bg: '#5A5F66', fg: '#FFFFFF' },
+    warmup: { bg: '#6E747C', fg: '#FFFFFF' },
+    stopped: { bg: '#6E747C', fg: '#FFFFFF' },
+    unknown: { bg: '#6E747C', fg: '#FFFFFF' },
+  },
+} as const;
+
+export type FlagPalette = (typeof Flags)['light'];
 
 /**
  * Barlow Condensed echoes the heavy italic condensed sans of the NASCAR

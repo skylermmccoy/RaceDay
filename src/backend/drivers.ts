@@ -1,3 +1,17 @@
+import {
+    carBadgeUrl,
+    cleanName,
+    fetchJson,
+    getSeasonRaces,
+    manufacturerName,
+    Series,
+    type RaceListEntry,
+    type SeriesInfo,
+} from "./nascar-api";
+
+export { Series, SeriesKeys } from "./nascar-api";
+export type { SeriesInfo, SeriesKey } from "./nascar-api";
+
 const url = "https://cf.nascar.com/cacher/drivers.json";
 
 interface NascarDriver {
@@ -89,33 +103,7 @@ export async function drivernames(series: SeriesInfo = Series.cup): Promise<Driv
         .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * The three national series the feeds cover. `id` keys every feed URL and the
- * car-badge path; `slug` is what drivers.json puts in Driver_Series.
- *
- * The Whelen Modified Tour appears in drivers.json but has no race or standings
- * feed, so it is deliberately absent. Series ids above 3 return 403.
- */
-export const Series = {
-    cup: { id: 1, slug: 'nascar-cup-series', label: 'Cup' },
-    oreilly: { id: 2, slug: 'nascar-oreilly-auto-parts-series', label: "O'Reilly" },
-    truck: { id: 3, slug: 'nascar-craftsman-truck-series', label: 'Trucks' },
-} as const;
-
-export type SeriesKey = keyof typeof Series;
-export type SeriesInfo = (typeof Series)[SeriesKey];
-
-export const SeriesKeys = Object.keys(Series) as SeriesKey[];
-
 const POINTS_RACE_TYPE_ID = 1;
-
-// Only the fields we use off race_list_basic.json — the feed carries ~45 more.
-interface NascarRaceListEntry {
-    race_id: number;
-    race_type_id: number;
-    race_date: string;
-    actual_laps: number;
-}
 
 // Season points standings as of a given race. `points` is the cumulative
 // season total; `delta_leader` is negative (points behind the leader).
@@ -175,20 +163,6 @@ export interface DriverStanding {
     isRookie: boolean;
 }
 
-async function fetchJson<T>(feedUrl: string): Promise<T> {
-    const response = await fetch(feedUrl);
-
-    if (!response.ok) {
-        throw new Error(`Request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return (await response.json()) as T;
-}
-
-function getSeasonRaces(season: number, seriesId: number): Promise<NascarRaceListEntry[]> {
-    return fetchJson(`https://cf.nascar.com/cacher/${season}/${seriesId}/race_list_basic.json`);
-}
-
 // Entry list for a single race — the only feed that knows which team and
 // manufacturer a driver actually ran, so it backstops drivers.json.
 async function getRaceResults(
@@ -206,7 +180,7 @@ async function getRaceResults(
 // Standings live under the race they were computed after, so "current standings"
 // means "the standings feed for the most recent points race". Exhibition races
 // (the Clash, the Duels) pay no points and are excluded. Newest first.
-function racesWithStandings(races: NascarRaceListEntry[]): NascarRaceListEntry[] {
+function racesWithStandings(races: RaceListEntry[]): RaceListEntry[] {
     const now = Date.now();
 
     return races
@@ -217,28 +191,6 @@ function racesWithStandings(races: NascarRaceListEntry[]): NascarRaceListEntry[]
                 Date.parse(r.race_date) <= now
         )
         .sort((a, b) => Date.parse(b.race_date) - Date.parse(a.race_date));
-}
-
-// The feed decorates names with eligibility markers: a leading "*", a trailing
-// "#" (rookie), and a trailing "(i)" (ineligible for this series' points).
-// Strip them — `isRookie` already carries the rookie flag as a real boolean.
-function cleanName(firstName: string, lastName: string): string {
-    return `${firstName} ${lastName}`
-        .replace(/\(i\)/gi, "")
-        .replace(/[*#]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-// Car number badges are served straight off the car number, so no join with
-// drivers.json is needed. Numbers with no badge on file 403 — the UI falls back
-// to a plain placeholder rather than trying to detect that here.
-function carBadgeUrl(carNumber: string, seriesId: number): string | null {
-    const number = carNumber.trim();
-    if (!number) return null;
-
-    // Badges are per-series — the same number is a different car in each.
-    return `https://cf.nascar.com/data/images/carbadges/${seriesId}/${number}.png`;
 }
 
 // The manufacturer logo lives on www.nascar.com (unlike the car badges, which
@@ -272,12 +224,6 @@ function pickDriverRecord(
         records.find(r => usableTeam(r)) ??
         records[0]
     );
-}
-
-// Manufacturer is a logo URL like ".../Toyota-180x180.png", so the make has to
-// be read back out of the filename.
-function manufacturerName(logoUrl: string | undefined): string {
-    return /\/([A-Za-z]+)-\d+x\d+\.png/.exec(logoUrl ?? "")?.[1] ?? "";
 }
 
 function groupByDriverId(drivers: NascarDriver[]): Map<number, NascarDriver[]> {
