@@ -22,6 +22,7 @@ import {
     seriesInfoById,
     SeriesKeys,
     type RaceListEntry,
+    type SeriesKey,
 } from "./nascar-api";
 
 export const LiveFeedUrl = "https://cf.nascar.com/live/feeds/live-feed.json";
@@ -456,10 +457,8 @@ const POINTS_RACE_TYPE_ID = 1;
  * completed race — the usual case between weekends — it is reused as `last`,
  * saving a round trip.
  */
-export async function fetchIdleState(
-    frozen: LiveRace | null,
-    signal?: AbortSignal
-): Promise<IdleState> {
+/** Every points race across the three national series, for the current season. */
+async function getPointsRaces(signal?: AbortSignal): Promise<RaceListEntry[]> {
     const season = new Date().getFullYear();
 
     // One series 403ing must not blank the screen, so settle rather than all().
@@ -467,18 +466,59 @@ export async function fetchIdleState(
         SeriesKeys.map(key => getSeasonRaces(season, Series[key].id, signal))
     );
 
-    const races = settled
+    return settled
         .flatMap(r => (r.status === "fulfilled" ? r.value : []))
         .filter(r => r.race_type_id === POINTS_RACE_TYPE_ID);
+}
 
+function nextFrom(races: RaceListEntry[]): UpcomingRace | null {
     const now = Date.now();
 
-    const next =
+    return (
         races
+            // winner_driver_id is the only reliable "has it run" signal —
+            // actual_laps is pre-populated for races that have not happened yet.
             .filter(r => r.winner_driver_id == null)
             .map(toUpcoming)
             .filter(r => Number.isFinite(r.startsAt) && r.startsAt > now)
-            .sort((a, b) => a.startsAt - b.startsAt)[0] ?? null;
+            .sort((a, b) => a.startsAt - b.startsAt)[0] ?? null
+    );
+}
+
+/**
+ * The soonest upcoming race across all three series.
+ *
+ * Separate from fetchIdleState because the fantasy screen needs the next race
+ * even while a different race is on track, and useLiveRace only carries `next`
+ * in its idle state.
+ */
+export async function fetchNextRace(signal?: AbortSignal): Promise<UpcomingRace | null> {
+    return nextFrom(await getPointsRaces(signal));
+}
+
+export type NextRaces = Record<SeriesKey, UpcomingRace | null>;
+
+/**
+ * The soonest upcoming race in *each* series, from a single pass over the
+ * schedules — so a fantasy entry can be open for all three at once.
+ */
+export async function fetchNextRaces(signal?: AbortSignal): Promise<NextRaces> {
+    const races = await getPointsRaces(signal);
+    const bySeries = {} as NextRaces;
+
+    for (const key of SeriesKeys) {
+        bySeries[key] = nextFrom(races.filter(r => r.series_id === Series[key].id));
+    }
+
+    return bySeries;
+}
+
+export async function fetchIdleState(
+    frozen: LiveRace | null,
+    signal?: AbortSignal
+): Promise<IdleState> {
+    const races = await getPointsRaces(signal);
+    const next = nextFrom(races);
 
     if (frozen && frozen.runType === "race" && frozen.flag === "finished") {
         return { next, last: frozen };

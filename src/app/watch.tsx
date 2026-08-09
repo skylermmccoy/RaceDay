@@ -1,5 +1,5 @@
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandHero } from '@/components/brand-hero';
@@ -12,7 +12,7 @@ const Channels = [
   {
     label: 'CW Sports',
     source: {
-      uri: 'https://goated-manifest.b-cdn.net/out/v2/90a2106634e5ed06ea2c9014c29a40a0/tracks-v1a0/stream.m3u8',
+      uri: '',
       contentType: 'hls',
     },
   },
@@ -24,7 +24,7 @@ const Channels = [
     },
   },
   {
-    label: 'ua sports',
+    label: 'usa sports',
     source: {
       uri: 'https://goated-manifest.b-cdn.net/out/v2/502208493620e08655861e2c85f425f4/tracks-v1a0/stream.m3u8',
       contentType: 'hls',
@@ -45,17 +45,17 @@ export default function WatchScreen() {
     p.loop = true;
   });
 
-  const uaPlayer = useVideoPlayer(Channels[2].source, (p) => {
+  const usaPlayer = useVideoPlayer(Channels[2].source, (p) => {
     p.loop = true;
   });
 
-  const players = [racePlayer, foxPlayer, uaPlayer];
+  const players = [racePlayer, foxPlayer, usaPlayer];
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BrandHero />
-
+        <ScrollView>
         <ThemedView style={styles.sectionHeader}>
           <ThemedText type="subtitle">Watch</ThemedText>
         </ThemedView>
@@ -78,6 +78,7 @@ export default function WatchScreen() {
             </ThemedView>
           ))}
         </ThemedView>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );

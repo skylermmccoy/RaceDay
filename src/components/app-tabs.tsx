@@ -28,6 +28,11 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="flag.checkered" />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="fantasy">
+        <NativeTabs.Trigger.Label>Fantasy</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="trophy" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="watch">
         <NativeTabs.Trigger.Label>Watch</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
