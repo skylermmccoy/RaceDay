@@ -1,15 +1,10 @@
-import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
+import { CarNumberBadge } from '@/components/car-number-badge';
 import { ManufacturerBadge } from '@/components/manufacturer-badge';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
 import type { DriverStanding } from '@/backend/drivers';
-
-// Car badges are 78x70 at source; render at half size so they stay crisp.
-const BadgeWidth = 39;
-const BadgeHeight = 35;
 
 export function StandingRow({ standing }: { standing: DriverStanding }) {
   const isPodium = standing.position <= 3;
@@ -23,23 +18,7 @@ export function StandingRow({ standing }: { standing: DriverStanding }) {
         {standing.position}
       </ThemedText>
 
-      {standing.carNumberImageUrl ? (
-        <Image
-          source={standing.carNumberImageUrl}
-          style={styles.badge}
-          contentFit="contain"
-          // Drivers between rides have no badge on file; a 403 leaves the slot
-          // empty rather than breaking the row.
-          transition={150}
-          accessibilityLabel={`Car number ${standing.carNumber}`}
-        />
-      ) : (
-        <ThemedView type="backgroundElement" style={[styles.badge, styles.badgePlaceholder]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            –
-          </ThemedText>
-        </ThemedView>
-      )}
+      <CarNumberBadge url={standing.carNumberImageUrl} carNumber={standing.carNumber} />
 
       <View style={styles.details}>
         <ThemedText numberOfLines={1}>{standing.name}</ThemedText>
@@ -95,15 +74,6 @@ const styles = StyleSheet.create({
   pointsValue: {
     fontFamily: Fonts.display,
     fontSize: 20,
-  },
-  badge: {
-    width: BadgeWidth,
-    height: BadgeHeight,
-    borderRadius: Spacing.half,
-  },
-  badgePlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   details: {
     flex: 1,

@@ -20,6 +20,14 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="live">
+        <NativeTabs.Trigger.Label>Live</NativeTabs.Trigger.Label>
+        {/* SF Symbol rather than a bundled PNG — there is no live icon in
+            assets/images/tabIcons yet. Swap in a template image here if one is
+            added, to match the other two tabs exactly. */}
+        <NativeTabs.Trigger.Icon sf="flag.checkered" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="watch">
         <NativeTabs.Trigger.Label>Watch</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

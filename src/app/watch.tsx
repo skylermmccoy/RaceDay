@@ -23,6 +23,13 @@ const Channels = [
       contentType: 'hls',
     },
   },
+  {
+    label: 'ua sports',
+    source: {
+      uri: 'https://goated-manifest.b-cdn.net/out/v2/502208493620e08655861e2c85f425f4/tracks-v1a0/stream.m3u8',
+      contentType: 'hls',
+    },
+  }
 ] as const;
 
 export default function WatchScreen() {
@@ -38,7 +45,11 @@ export default function WatchScreen() {
     p.loop = true;
   });
 
-  const players = [racePlayer, foxPlayer];
+  const uaPlayer = useVideoPlayer(Channels[2].source, (p) => {
+    p.loop = true;
+  });
+
+  const players = [racePlayer, foxPlayer, uaPlayer];
 
   return (
     <ThemedView style={styles.container}>
