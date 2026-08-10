@@ -86,6 +86,31 @@ export const Flags = {
 export type FlagPalette = (typeof Flags)['light'];
 
 /**
+ * The betting deck is a card table: deliberately always-dark whatever the
+ * system scheme, so its palette lives here rather than in `Colors`. Components
+ * under src/components/betting/ draw from this instead of useTheme() — the felt
+ * doesn't have a light mode.
+ */
+export const Casino = {
+  /** Deep green felt falling to black, for `experimental_backgroundImage`. */
+  felt: 'linear-gradient(180deg, #123528 0%, #0A2318 55%, #06120C 100%)',
+  cardFace: '#17191E',
+  cardEdge: '#2C313A',
+  /** Recessed wells inside a card (image panel, wager tray). */
+  inset: '#101216',
+  text: '#F2F2F5',
+  textDim: '#9BA1AA',
+  /** Chip gold — the money color on the table. */
+  chip: Brand.gold,
+  /** Ink that stays legible on a chip-gold fill. */
+  chipText: '#241E00',
+  /** Right-swipe / confirm. Matches the dark green flag. */
+  bet: '#2E9D52',
+  /** Left-swipe / skip. Matches the dark red flag. */
+  skip: '#E14B4B',
+} as const;
+
+/**
  * Barlow Condensed echoes the heavy italic condensed sans of the NASCAR
  * wordmark. Bundled in assets/fonts and registered in `src/app/_layout.tsx`,
  * so the family names are identical on every platform.

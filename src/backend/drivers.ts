@@ -2,10 +2,12 @@ import {
     carBadgeUrl,
     cleanName,
     fetchJson,
+    getRaceResults,
     getSeasonRaces,
     manufacturerName,
     Series,
     type RaceListEntry,
+    type RaceResult,
     type SeriesInfo,
 } from "./nascar-api";
 
@@ -125,18 +127,6 @@ interface NascarLivePointsEntry {
     is_points_eligible: boolean;
 }
 
-// Per-race entry data. Used as the fallback source for team and manufacturer
-// when a driver has no usable record in drivers.json.
-interface NascarRaceResult {
-    driver_id: number;
-    team_name: string;
-    car_make: string;
-}
-
-interface NascarWeekendFeed {
-    weekend_race: { results: NascarRaceResult[] }[];
-}
-
 // One row of the standings table, shaped for FlatList.
 export interface DriverStanding {
     id: string;
@@ -152,6 +142,10 @@ export interface DriverStanding {
     manufacturerBadge: string | null;
     /** Null for drivers not currently fielding a car. */
     carNumberImageUrl: string | null;
+    /** Large driver photo, Cloudflare-protected host — may fail to load. Null when the feed only has a placeholder. */
+    headshotUrl: string | null;
+    /** ~100x120 variant of headshotUrl, same caveats. */
+    headshotSmallUrl: string | null;
     points: number;
     pointsBehindLeader: number;
     pointsEarnedLastRace: number;
@@ -161,20 +155,6 @@ export interface DriverStanding {
     poles: number;
     isPlayoffEligible: boolean;
     isRookie: boolean;
-}
-
-// Entry list for a single race — the only feed that knows which team and
-// manufacturer a driver actually ran, so it backstops drivers.json.
-async function getRaceResults(
-    season: number,
-    seriesId: number,
-    raceId: number
-): Promise<NascarRaceResult[]> {
-    const feed = await fetchJson<NascarWeekendFeed>(
-        `https://cf.nascar.com/cacher/${season}/${seriesId}/${raceId}/weekend-feed.json`
-    );
-
-    return feed.weekend_race[0]?.results ?? [];
 }
 
 // Standings live under the race they were computed after, so "current standings"
@@ -200,6 +180,15 @@ function racesWithStandings(races: RaceListEntry[]): RaceListEntry[] {
 function manufacturerBadgeUrl(record: NascarDriver | undefined): string | null {
     const logo = record?.Manufacturer_Small.trim() || record?.Manufacturer.trim() || "";
     return logo || null;
+}
+
+// Headshots live on www.nascar.com like the manufacturer logos (same Cloudflare
+// 403 caveat), and most Cup records carry a ".../default.png" placeholder rather
+// than a real photo — both cases collapse to null so the UI draws its own
+// fallback plate instead of a broken image or a generic silhouette.
+function usableHeadshot(value: string | undefined): string | null {
+    const image = value?.trim() ?? "";
+    return image && !image.includes("default.png") ? image : null;
 }
 
 // Some records leak an internal ID into the Team field (Team: "198"), which is
@@ -241,7 +230,7 @@ function groupByDriverId(drivers: NascarDriver[]): Map<number, NascarDriver[]> {
 function toStandings(
     entries: NascarLivePointsEntry[],
     driversById: Map<number, NascarDriver[]>,
-    resultsByDriverId: Map<number, NascarRaceResult>,
+    resultsByDriverId: Map<number, RaceResult>,
     seriesId: number
 ): DriverStanding[] {
     return entries
@@ -265,6 +254,8 @@ function toStandings(
             manufacturer: result?.car_make.trim() || manufacturerName(record?.Manufacturer),
             manufacturerBadge: manufacturerBadgeUrl(record),
             carNumberImageUrl: carBadgeUrl(e.car_number, seriesId),
+            headshotUrl: usableHeadshot(record?.Image),
+            headshotSmallUrl: usableHeadshot(record?.Image_Small),
             points: e.points,
             pointsBehindLeader: Math.abs(e.delta_leader),
             pointsEarnedLastRace: e.points_earned_this_race,
@@ -306,7 +297,7 @@ export async function driverstandings(
                     .then(d => getSeriesDrivers(d, series.slug))
                     .catch(() => [] as NascarDriver[]),
                 getRaceResults(resolvedSeason, series.id, race.race_id).catch(
-                    () => [] as NascarRaceResult[]
+                    () => [] as RaceResult[]
                 ),
             ]);
 
@@ -325,6 +316,86 @@ export async function driverstandings(
     throw new Error(`No Cup Series standings available for the ${season} season`);
 }
 
+// ---------------------------------------------------------------------------
+// Recent form: how each driver finished in the last few completed races
+// ---------------------------------------------------------------------------
+
+export interface RecentFinish {
+    raceId: number;
+    raceName: string;
+    position: number;
+    /** "Running" for classified finishers; otherwise the retirement reason ("Accident", …). */
+    status: string;
+    isDnf: boolean;
+}
+
+export interface RecentForm {
+    /** The completed races that were scanned, newest first. */
+    races: { raceId: number; raceName: string; raceDate: string }[];
+    /** Keyed by String(driver_id); finishes newest first. A driver missing a race simply has fewer rows. */
+    byDriver: Record<string, RecentFinish[]>;
+}
+
+const EmptyForm: RecentForm = { races: [], byDriver: {} };
+
+function completedPointsRaces(races: RaceListEntry[]): RaceListEntry[] {
+    return races
+        // winner_driver_id is the only reliable completion signal — actual_laps
+        // is pre-populated with scheduled_laps for races that have not run yet.
+        .filter(r => r.race_type_id === POINTS_RACE_TYPE_ID && r.winner_driver_id != null)
+        .sort((a, b) => Date.parse(b.race_date) - Date.parse(a.race_date));
+}
+
+/**
+ * Finishing positions from the last `count` completed points races, for the
+ * betting deck's form strip. Best-effort throughout: a race whose results feed
+ * fails is dropped rather than blanking the whole thing.
+ */
+export async function recentFinishes(
+    series: SeriesInfo = Series.cup,
+    count = 2,
+    season: number = new Date().getFullYear()
+): Promise<RecentForm> {
+    // Same season fallback as driverstandings: early in the calendar year the
+    // new season's race list may not be published yet.
+    let resolvedSeason = season;
+    let completed = completedPointsRaces(await getSeasonRaces(season, series.id).catch(() => []));
+    if (completed.length === 0) {
+        resolvedSeason = season - 1;
+        completed = completedPointsRaces(
+            await getSeasonRaces(resolvedSeason, series.id).catch(() => [])
+        );
+    }
+
+    const recent = completed.slice(0, count);
+    const settled = await Promise.allSettled(
+        recent.map(r => getRaceResults(resolvedSeason, series.id, r.race_id))
+    );
+
+    const form: RecentForm = { races: [], byDriver: {} };
+
+    settled.forEach((result, i) => {
+        if (result.status !== "fulfilled") return;
+
+        const race = recent[i];
+        const raceName = race.race_name?.trim() ?? "";
+        form.races.push({ raceId: race.race_id, raceName, raceDate: race.race_date });
+
+        for (const row of result.value) {
+            if (!row.driver_id) continue;
+            (form.byDriver[String(row.driver_id)] ??= []).push({
+                raceId: race.race_id,
+                raceName,
+                position: row.finishing_position,
+                status: row.finishing_status,
+                isDnf: row.finishing_status !== "Running",
+            });
+        }
+    });
+
+    return form.races.length > 0 ? form : EmptyForm;
+}
+
 async function main() {
     try {
         const names = await drivernames();
@@ -338,6 +409,18 @@ async function main() {
                 `${String(s.position).padStart(2)}. #${s.carNumber.padEnd(3)} ${s.name.padEnd(22)} ` +
                 `${String(s.points).padStart(4)} pts  ${s.team.padEnd(26)} ` +
                 `${s.manufacturer.padEnd(10)} ${s.carNumberImageUrl ?? "(no badge)"}`
+            );
+        }
+
+        const form = await recentFinishes();
+        console.log(`\nrecent form (${form.races.map(r => r.raceName).join(" · ") || "none"})`);
+        for (const s of standings) {
+            const line = (form.byDriver[s.id] ?? [])
+                .map(f => (f.isDnf ? `DNF(P${f.position})` : `P${f.position}`))
+                .join("  ") || "—";
+            console.log(
+                `  #${s.carNumber.padEnd(3)} ${s.name.padEnd(22)} ` +
+                `${(s.headshotUrl ? "headshot" : "no photo").padEnd(9)} ${line}`
             );
         }
     } catch (err) {

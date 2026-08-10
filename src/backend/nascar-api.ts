@@ -189,6 +189,42 @@ function parseHttpDate(value: string | null): number | null {
     return Number.isFinite(at) ? at : null;
 }
 
+// Only the fields we use off weekend-feed.json's results[] — the official
+// post-race classification. finishing_status is "Running" for classified
+// finishers; anything else ("Accident", "Engine", …) is a retirement reason.
+export interface RaceResult {
+    driver_id: number;
+    team_name: string;
+    car_make: string;
+    car_number: string;
+    finishing_position: number;
+    finishing_status: string;
+    /** Already reflected in finishing_position — the feed demotes DQ'd cars. */
+    disqualified: boolean;
+}
+
+interface WeekendFeed {
+    weekend_race: { results: RaceResult[] }[];
+}
+
+/**
+ * Official results for a single race. Also the only feed that knows which team
+ * and manufacturer a driver actually ran, so drivers.ts uses it as a backstop.
+ */
+export async function getRaceResults(
+    season: number,
+    seriesId: number,
+    raceId: number,
+    signal?: AbortSignal
+): Promise<RaceResult[]> {
+    const feed = await fetchJson<WeekendFeed>(
+        `https://cf.nascar.com/cacher/${season}/${seriesId}/${raceId}/weekend-feed.json`,
+        signal
+    );
+
+    return feed.weekend_race[0]?.results ?? [];
+}
+
 // The feed decorates names with eligibility markers: a leading "*", a trailing
 // "#" (rookie), and a trailing "(i)" (ineligible for this series' points).
 // Strip them — the standings carry the rookie flag as a real boolean.
