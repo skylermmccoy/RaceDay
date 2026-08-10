@@ -10,6 +10,13 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 // iOS needs the `hls` hint to detect tracks on an .m3u8 manifest.
 const Channels = [
   {
+    label: 'Nascar TV',
+    source: {
+      uri: 'https://aegis-cloudfront-1.tubi.video/a8586229-0ea0-4eb4-bb23-09674c2a94d3/playlist240p-cc.m3u8',
+      contentType: 'hls',
+    },
+  },
+  {
     label: 'CW Sports',
     source: {
       uri: '',
