@@ -3,20 +3,20 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { driverstandings, type DriverStanding } from '@/backend/drivers';
-import { MaxPicks, scorePicks } from '@/backend/fantasy';
-import { fetchNextRaces, type LiveRace, type NextRaces } from '@/backend/live-race';
-import { Series, type SeriesKey } from '@/backend/nascar-api';
+import { driverstandings, recentFinishes, type DriverStanding, type RecentForm } from '@/backend/drivers';
+import { fetchNextRaces, type LiveRace, type UpcomingRace } from '@/backend/live-race';
+import { Series } from '@/backend/nascar-api';
+import { BankrollHeader } from '@/components/betting/bankroll-header';
+import { BetDeckOverlay } from '@/components/betting/bet-deck-overlay';
+import { BetReceipt } from '@/components/betting/bet-receipt';
+import { BetScoreboard } from '@/components/betting/bet-scoreboard';
 import { BrandHero } from '@/components/brand-hero';
 import { NextRaceCard } from '@/components/next-race-card';
-import { PickScoreboard } from '@/components/pick-scoreboard';
-import { SeriesPicker } from '@/components/series-picker';
 import { StandingRow } from '@/components/standing-row';
-import { SubmitPicksButton } from '@/components/submit-picks-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useFantasyEntry } from '@/hooks/use-fantasy-entry';
+import { BottomTabInset, Casino, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useBetSheet } from '@/hooks/use-bet-sheet';
 import { useLiveRace } from '@/hooks/use-live-race';
 
 /** Whatever race the global live feed is currently serving, if any. */
@@ -34,51 +34,39 @@ function feedRace(state: ReturnType<typeof useLiveRace>['state']): LiveRace | nu
   }
 }
 
+/**
+ * The betting game is Cup-only — one card per driver in the deck, and three
+ * parallel sheets would triple every screen state for little payoff.
+ */
 export default function FantasyScreen() {
   const safeAreaInsets = useSafeAreaInsets();
-  const [seriesKey, setSeriesKey] = useState<SeriesKey>('cup');
-  const [upcoming, setUpcoming] = useState<NextRaces | null | undefined>(undefined);
-  // Tag the standings with the series they belong to, so a slow response can
-  // never paint under a different race's series.
-  const [result, setResult] = useState<{
-    seriesId: number;
-    rows?: DriverStanding[];
-    error?: string;
-  } | null>(null);
-
+  const [upcoming, setUpcoming] = useState<UpcomingRace | null | undefined>(undefined);
+  const [standings, setStandings] = useState<DriverStanding[] | null>(null);
+  const [form, setForm] = useState<RecentForm | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [deckOpen, setDeckOpen] = useState(false);
+
   const { state: liveState } = useLiveRace();
   const race = feedRace(liveState);
 
-  // Every series has its own upcoming race and its own entry, so all three can
-  // be open at once; the picker only chooses which one is on screen.
-  const {
-    race: next,
-    entry,
-    picks: draft,
-    phase,
-    dirty,
-    career,
-    submittedSeries,
-    ready,
-    togglePick,
-    submit,
-  } = useFantasyEntry(upcoming ?? null, seriesKey, race);
+  const { bankroll, balance, inPlay, sheet, phase, ready, lastSettled, submitSheet } = useBetSheet(
+    upcoming ?? null,
+    race
+  );
 
-  const series = Series[seriesKey];
-
-  const current = result?.seriesId === series?.id ? result : null;
-  const standings = current?.rows ?? [];
-  const error = current?.error ?? null;
-
-  // Once the entry is locked, show it scoring against the race on track;
-  // otherwise this screen is about picking for what's next.
-  const scoringRace = phase !== 'open' && race?.raceId === entry?.raceId ? race : null;
-  const board = scorePicks(draft, standings, scoringRace, entry?.seriesId ?? series.id);
-  const isFull = draft.length >= MaxPicks;
-  const loading = upcoming === undefined || current === null || !ready;
-
+  const loading = upcoming === undefined || standings === null || !ready;
   const listBottomInset = safeAreaInsets.bottom + BottomTabInset + Spacing.three;
+
+  const loadStandings = useCallback(async () => {
+    try {
+      const rows = await driverstandings(Series.cup);
+      setStandings(rows);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load standings');
+    }
+  }, []);
 
   // Tabs stay mounted, so a plain useEffect would only ever fire once.
   useFocusEffect(
@@ -87,55 +75,53 @@ export default function FantasyScreen() {
 
       fetchNextRaces()
         .then((races) => {
-          if (!cancelled) setUpcoming(races);
+          if (!cancelled) setUpcoming(races.cup);
         })
         .catch(() => {
           if (!cancelled) setUpcoming(null);
         });
 
-      return () => {
-        cancelled = true;
-      };
-    }, [])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      const seriesId = series.id;
-
-      driverstandings(series)
-        .then((rows) => {
-          if (!cancelled) setResult({ seriesId, rows });
+      // The form strip is garnish — it should never block the deck.
+      recentFinishes(Series.cup)
+        .then((recent) => {
+          if (!cancelled) setForm(recent);
         })
-        .catch((err: unknown) => {
-          if (!cancelled) {
-            setResult({
-              seriesId,
-              error: err instanceof Error ? err.message : 'Could not load standings',
-            });
-          }
-        });
+        .catch(() => {});
+
+      void loadStandings();
 
       return () => {
         cancelled = true;
       };
-    }, [series])
+    }, [loadStandings])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      setResult({ seriesId: series.id, rows: await driverstandings(series) });
-    } catch (err) {
-      setResult({
-        seriesId: series.id,
-        error: err instanceof Error ? err.message : 'Could not load standings',
-      });
+      await loadStandings();
     } finally {
       setRefreshing(false);
     }
-  }, [series]);
+  }, [loadStandings]);
+
+  const settled = sheet ? (bankroll.races[String(sheet.raceId)] ?? null) : null;
+  const canStart = !loading && phase === 'open' && upcoming != null && (standings?.length ?? 0) > 0;
+
+  const ctaLabel = loading
+    ? 'Loading…'
+    : !upcoming
+      ? 'No upcoming race'
+      : phase === 'locked'
+        ? 'Locked — race under way'
+        : phase === 'settled'
+          ? `Settled ${settled && settled.net >= 0 ? '+' : ''}${settled?.net ?? ''}`
+          : sheet
+            ? `Edit bets (${sheet.bets.length} placed)`
+            : 'Start sheet';
+
+  // The race the sheet should score against, once it's the one on track.
+  const scoringRace = sheet && race?.raceId === sheet.raceId ? race : null;
 
   return (
     <ThemedView style={styles.container}>
@@ -143,86 +129,52 @@ export default function FantasyScreen() {
         {/* Fixed header — only the list below it scrolls. */}
         <BrandHero />
 
-        <View style={styles.listHeader}>
-          <View style={styles.headerText}>
-            <ThemedText type="smallBold" style={styles.headerLabel}>
-              Total points
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-              {Object.keys(career.races).length
-                ? `${Object.keys(career.races).length} races scored`
-                : 'Enter a race to start scoring'}
-            </ThemedText>
-          </View>
+        <BankrollHeader balance={balance} inPlay={inPlay} lastSettled={lastSettled} />
 
-          <ThemedText style={styles.total} themeColor="positive">
-            {career.total}
+        <Pressable
+          onPress={() => setDeckOpen(true)}
+          disabled={!canStart}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canStart }}
+          style={({ pressed }) => [
+            styles.startButton,
+            !canStart && styles.startDisabled,
+            pressed && canStart && styles.pressed,
+          ]}>
+          <ThemedText
+            style={[styles.startLabel, canStart && styles.startLabelActive]}
+            themeColor={canStart ? undefined : 'textSecondary'}>
+            {ctaLabel}
           </ThemedText>
-        </View>
-
-        {/* Each series has its own next race, so all three entries can be open
-            at once. A tick marks the ones already submitted. */}
-        <SeriesPicker value={seriesKey} onChange={setSeriesKey} done={submittedSeries} />
-
-        {next ? (
-          <SubmitPicksButton
-            phase={phase}
-            picked={draft.length}
-            dirty={dirty}
-            onSubmit={submit}
-          />
-        ) : null}
+        </Pressable>
 
         <ThemedView style={styles.listContainer}>
           {loading ? <ActivityIndicator /> : null}
           {error ? <ThemedText type="small">{error}</ThemedText> : null}
-          {upcoming && !next ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              No upcoming {series.label} races scheduled.
-            </ThemedText>
-          ) : null}
 
           <FlatList
-            data={standings}
-            // Picks and score both live outside the row data.
-            extraData={board}
-            // Context, not a control: the scoreboard / next-race card scrolls
-            // away so the driver list isn't picked through a keyhole. Passed as
-            // an element, not a component — this screen re-renders on every
-            // live poll, and an inline component type would remount the
-            // countdown each time, where an element reconciles in place.
+            data={standings ?? []}
+            extraData={sheet}
+            // Context, not controls: the sheet card and next-race card scroll
+            // away so the standings aren't read through a keyhole. Passed as an
+            // element — this screen re-renders on every live poll, and an
+            // inline component type would remount the countdown each time.
             ListHeaderComponent={
-              scoringRace ? (
-                <PickScoreboard
-                  board={board}
-                  race={scoringRace}
-                  seriesLabel={series.label}
-                  emptyHint="No picks were submitted for this race."
-                />
-              ) : next ? (
-                <NextRaceCard race={next} focused />
-              ) : null
+              <View style={styles.listHeaderStack}>
+                {upcoming ? <NextRaceCard race={upcoming} focused /> : null}
+                {sheet && (phase !== 'open' || settled) ? (
+                  <BetScoreboard sheet={sheet} race={scoringRace} settled={settled} />
+                ) : sheet ? (
+                  <BetReceipt bets={sheet.bets} balanceAfter={balance} />
+                ) : null}
+                {upcoming === null ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    No upcoming Cup races scheduled.
+                  </ThemedText>
+                ) : null}
+              </View>
             }
-            renderItem={({ item }) => {
-              const isSelected = draft.includes(item.id);
-              // At the cap, everyone not already picked is out of reach until a
-              // pick is given back. Once locked, nothing is selectable.
-              const isUnavailable = phase !== 'open' || (isFull && !isSelected);
-
-              return (
-                <Pressable
-                  onPress={() => togglePick(item.id)}
-                  disabled={isUnavailable || !ready}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected, disabled: isUnavailable }}>
-                  <ThemedView
-                    type={isSelected ? 'backgroundSelected' : 'background'}
-                    style={[styles.row, isUnavailable && !isSelected && styles.unavailable]}>
-                    <StandingRow standing={item} />
-                  </ThemedView>
-                </Pressable>
-              );
-            }}
+            renderItem={({ item }) => <StandingRow standing={item} />}
             keyExtractor={(item) => item.id}
             refreshing={refreshing}
             onRefresh={onRefresh}
@@ -233,6 +185,20 @@ export default function FantasyScreen() {
           />
         </ThemedView>
       </SafeAreaView>
+
+      {upcoming ? (
+        <BetDeckOverlay
+          visible={deckOpen}
+          race={upcoming}
+          standings={standings ?? []}
+          form={form}
+          // Editing refunds the old escrow before the new one is taken.
+          availableBalance={balance + (sheet?.staked ?? 0)}
+          initialBets={sheet?.bets ?? null}
+          onPlace={submitSheet}
+          onClose={() => setDeckOpen(false)}
+        />
+      ) : null}
     </ThemedView>
   );
 }
@@ -247,44 +213,40 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    // Tighter than the other tabs: this screen stacks four pinned rows above
-    // the list, so the standard gap costs three rows of drivers.
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
   },
-  listHeader: {
+  startButton: {
     alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    backgroundColor: Casino.chip,
   },
-  headerText: {
-    flex: 1,
-    gap: Spacing.half,
+  startDisabled: {
+    backgroundColor: 'transparent',
   },
-  headerLabel: {
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  pressed: {
+    opacity: 0.8,
   },
-  total: {
+  startLabel: {
     fontFamily: Fonts.display,
-    fontSize: 28,
-    lineHeight: 30,
+    fontSize: 20,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    lineHeight: 24,
+  },
+  startLabelActive: {
+    color: Casino.chipText,
   },
   listContainer: {
     flex: 1,
     alignSelf: 'stretch',
   },
-  row: {
-    // Pulled out to the screen's gutter so the selected fill reads as a band
-    // across the row rather than a floating box.
-    marginHorizontal: -Spacing.two,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Spacing.two,
-  },
-  unavailable: {
-    opacity: 0.4,
+  listHeaderStack: {
+    gap: Spacing.two,
+    marginBottom: Spacing.two,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
