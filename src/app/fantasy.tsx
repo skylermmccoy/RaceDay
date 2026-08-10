@@ -145,7 +145,9 @@ export default function FantasyScreen() {
 
         <View style={styles.listHeader}>
           <View style={styles.headerText}>
-            <ThemedText type="subtitle">Total points</ThemedText>
+            <ThemedText type="smallBold" style={styles.headerLabel}>
+              Total points
+            </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
               {Object.keys(career.races).length
                 ? `${Object.keys(career.races).length} races scored`
@@ -161,20 +163,6 @@ export default function FantasyScreen() {
         {/* Each series has its own next race, so all three entries can be open
             at once. A tick marks the ones already submitted. */}
         <SeriesPicker value={seriesKey} onChange={setSeriesKey} done={submittedSeries} />
-
-        {/* Pinned rather than living in the list header: this screen re-renders
-            on every live poll, and an inline ListHeaderComponent element would
-            be rebuilt — and the countdown remounted — each time. */}
-        {scoringRace ? (
-          <PickScoreboard
-            board={board}
-            race={scoringRace}
-            seriesLabel={series.label}
-            emptyHint="No picks were submitted for this race."
-          />
-        ) : next ? (
-          <NextRaceCard race={next} focused />
-        ) : null}
 
         {next ? (
           <SubmitPicksButton
@@ -198,6 +186,23 @@ export default function FantasyScreen() {
             data={standings}
             // Picks and score both live outside the row data.
             extraData={board}
+            // Context, not a control: the scoreboard / next-race card scrolls
+            // away so the driver list isn't picked through a keyhole. Passed as
+            // an element, not a component — this screen re-renders on every
+            // live poll, and an inline component type would remount the
+            // countdown each time, where an element reconciles in place.
+            ListHeaderComponent={
+              scoringRace ? (
+                <PickScoreboard
+                  board={board}
+                  race={scoringRace}
+                  seriesLabel={series.label}
+                  emptyHint="No picks were submitted for this race."
+                />
+              ) : next ? (
+                <NextRaceCard race={next} focused />
+              ) : null
+            }
             renderItem={({ item }) => {
               const isSelected = draft.includes(item.id);
               // At the cap, everyone not already picked is out of reach until a
@@ -242,7 +247,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
+    // Tighter than the other tabs: this screen stacks four pinned rows above
+    // the list, so the standard gap costs three rows of drivers.
+    gap: Spacing.two,
     maxWidth: MaxContentWidth,
   },
   listHeader: {
@@ -256,10 +263,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
+  headerLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   total: {
     fontFamily: Fonts.display,
-    fontSize: 44,
-    lineHeight: 46,
+    fontSize: 28,
+    lineHeight: 30,
   },
   listContainer: {
     flex: 1,

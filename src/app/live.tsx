@@ -51,10 +51,8 @@ export default function LiveScreen() {
         {/* Fixed header — only the running order below it scrolls. */}
         <BrandHero />
 
-        <ThemedView style={styles.listHeader}>
-          <ThemedText type="subtitle">Live</ThemedText>
-        </ThemedView>
-
+        {/* No "Live" heading — the flag banner and race name below say it, and
+            the tab bar already names the screen. The list needs the room more. */}
         {state.status === 'loading' ? <ActivityIndicator /> : null}
 
         {state.status === 'error' ? (
@@ -113,9 +111,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     maxWidth: MaxContentWidth,
-  },
-  listHeader: {
-    alignSelf: 'stretch',
   },
   listContainer: {
     flex: 1,

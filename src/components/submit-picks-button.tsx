@@ -62,9 +62,10 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.three,
+    // Pinned above the driver list, so it stays a tap target without taking a
+    // row's worth of room from the list. The screen's own gap spaces it below.
+    paddingVertical: Spacing.two,
     borderRadius: Spacing.two,
-    marginBottom: Spacing.three,
   },
   pressed: {
     opacity: 0.8,

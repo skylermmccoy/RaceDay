@@ -36,7 +36,11 @@ export function LiveHeader({
   const isRace = race.runType === 'race' && race.lapsInRace > 0;
   const ago = agoLabel(race.lastModified, now);
 
+  // Track name rides the meta line rather than a line of its own — the header
+  // is pinned above the running order, so every line it takes is one the list
+  // loses.
   const stats = [
+    race.trackName,
     race.cautions > 0 ? `${race.cautions} cautions` : null,
     race.leadChanges > 0 ? `${race.leadChanges} lead changes` : null,
     ago,
@@ -53,9 +57,8 @@ export function LiveHeader({
         ) : null}
       </View>
 
-      <ThemedText numberOfLines={1}>{race.runName}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-        {race.trackName}
+      <ThemedText type="smallBold" numberOfLines={1}>
+        {race.runName}
       </ThemedText>
 
       {isRace ? (
@@ -63,21 +66,15 @@ export function LiveHeader({
           <ThemedText style={styles.lapCount}>
             {race.lapNumber} / {race.lapsInRace}
           </ThemedText>
-          <View style={styles.lapMeta}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {race.lapsToGo} to go
-            </ThemedText>
-            {race.stage ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Stage {race.stage.number} · ends L{race.stage.finishAtLap}
-              </ThemedText>
-            ) : null}
-          </View>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.lapMeta}>
+            {race.lapsToGo} to go
+            {race.stage ? ` · Stage ${race.stage.number} ends L${race.stage.finishAtLap}` : ''}
+          </ThemedText>
         </View>
       ) : null}
 
       {stats.length ? (
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
           {stats.join(' · ')}
         </ThemedText>
       ) : null}
@@ -88,7 +85,7 @@ export function LiveHeader({
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'stretch',
-    gap: Spacing.one,
+    gap: Spacing.half,
   },
   topRow: {
     flexDirection: 'row',
@@ -99,16 +96,14 @@ const styles = StyleSheet.create({
   lapRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: Spacing.three,
-    marginTop: Spacing.one,
+    gap: Spacing.two,
   },
   lapCount: {
     fontFamily: Fonts.display,
-    fontSize: 32,
-    lineHeight: 34,
+    fontSize: 20,
+    lineHeight: 22,
   },
   lapMeta: {
     flex: 1,
-    gap: Spacing.half,
   },
 });
