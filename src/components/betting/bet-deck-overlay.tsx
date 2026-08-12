@@ -79,13 +79,14 @@ function DeckSession({
     return () => clearTimeout(timer);
   }, [hint]);
 
-  // Warm the next few headshots so cards don't pop in blank mid-deck.
+  // Warm the next few cards' art so they don't pop in blank mid-deck. The cards
+  // read with cachePolicy="memory-disk", so the prefetch has to populate memory too.
   useEffect(() => {
     const urls = standings
       .slice(index + 1, index + 4)
-      .map((s) => s.headshotUrl)
+      .flatMap((s) => [s.headshotUrl, s.carNumberImageUrl])
       .filter((url): url is string => url !== null);
-    if (urls.length) Image.prefetch(urls);
+    if (urls.length) Image.prefetch(urls, { cachePolicy: 'memory-disk' });
   }, [index, standings]);
 
   const driver = standings[index] ?? null;

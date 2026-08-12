@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useImperativeHandle, type ReactNode, type Ref } from 'react';
+import {
+  useCallback,
+  useImperativeHandle,
+  useLayoutEffect,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -60,7 +66,7 @@ export function SwipeCardStack({
 
   // The committed card flew out under the previous key — its replacement
   // starts centered, without animating back across the screen.
-  useEffect(() => {
+  useLayoutEffect(() => {
     translateX.set(0);
     translateY.set(0);
   }, [topKey, translateX, translateY]);
