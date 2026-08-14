@@ -56,8 +56,11 @@ export function DriverBetCard({
   limit: number;
   onDraft: (draft: DraftBet) => void;
 }) {
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const showPhoto = standing.headshotUrl !== null && !photoFailed;
+  // Keyed by URL, not a boolean: the two card slots are recycled across the whole
+  // deck, so a boolean would pin every later driver in this slot to the number
+  // fallback after one failed fetch.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showPhoto = standing.headshotUrl !== null && failedUrl !== standing.headshotUrl;
 
   return (
     <View style={styles.card}>
@@ -74,11 +77,13 @@ export function DriverBetCard({
           {showPhoto ? (
             <Image
               source={standing.headshotUrl}
+              recyclingKey={standing.id}
               style={styles.photo}
               contentFit="cover"
               contentPosition="top center"
-              transition={200}
-              onError={() => setPhotoFailed(true)}
+              cachePolicy="memory-disk"
+              transition={0}
+              onError={() => setFailedUrl(standing.headshotUrl)}
               accessibilityLabel={standing.name}
             />
           ) : (
@@ -95,9 +100,11 @@ export function DriverBetCard({
           {standing.carNumberImageUrl ? (
             <Image
               source={standing.carNumberImageUrl}
+              recyclingKey={standing.id}
               style={styles.badge}
               contentFit="contain"
-              transition={150}
+              cachePolicy="memory-disk"
+              transition={0}
               accessibilityLabel={`Car number ${standing.carNumber}`}
             />
           ) : null}
